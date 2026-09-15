@@ -14,20 +14,29 @@ def build_translator():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, src_lang="eng_Latn")
     model = AutoModelForSeq2SeqLM.from_pretrained(
         MODEL_NAME,
-        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+        dtype=torch.float16 if device == "cuda" else torch.float32,
     ).to(device)
+    model.eval()
 
-    def translate(text, max_new_tokens=256):
-        if not text:
-            return ""
-        inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
-        out = model.generate(
-            **inputs,
-            forced_bos_token_id=tokenizer.convert_tokens_to_ids("mar_Deva"),
-            max_new_tokens=max_new_tokens,
-            max_length=None,
-        )
-        return tokenizer.decode(out[0], skip_special_tokens=True)
+    def translate(texts, max_new_tokens=256):
+        single = isinstance(texts, str)
+        if single:
+            texts = [texts]
+
+        if not any(texts):
+            return "" if single else ["" for _ in texts]
+
+        inputs = tokenizer(texts, return_tensors="pt", padding=True, truncation=True, max_length=512).to(device)
+        with torch.inference_mode():
+            out = model.generate(
+                **inputs,
+                forced_bos_token_id=tokenizer.convert_tokens_to_ids("mar_Deva"),
+                max_new_tokens=max_new_tokens,
+                max_length=None,
+            )
+        results = tokenizer.batch_decode(out, skip_special_tokens=True)
+        results = [res if orig else "" for orig, res in zip(texts, results)]
+        return results[0] if single else results
 
     return translate
 
@@ -37,6 +46,7 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--resume_from", type=int, default=0)
+    parser.add_argument("--batch_size", type=int, default=16)
     args = parser.parse_args()
 
     ds = load_dataset("unsloth/alpaca-cleaned")["train"]
@@ -47,21 +57,29 @@ def main():
     mode = "a" if args.resume_from > 0 else "w"
     with open(args.output, mode, encoding="utf-8") as f:
         translated_rows = 0
+        total_len = len(ds)
 
-        for i, ex in enumerate(ds):
-            if i < args.resume_from:
-                continue
-            try: 
-                row = {
-                    "instruction": translate(ex["instruction"]),
-                    "input": translate(ex["input"]),
-                    "output": translate(ex["output"], max_new_tokens=512),
-                }
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        for i in range(args.resume_from, total_len, args.batch_size):
+            batch = ds[i : i + args.batch_size]
+            try:
+                trans_instructions = translate(batch["instruction"], max_new_tokens=256)
+                trans_inputs = translate(batch["input"], max_new_tokens=256)
+                trans_outputs = translate(batch["output"], max_new_tokens=512)
+
+                for inst, inp, out in zip(trans_instructions, trans_inputs, trans_outputs):
+                    row = {
+                        "instruction": inst,
+                        "input": inp,
+                        "output": out,
+                    }
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
                 f.flush()
-                translated_rows += 1
-                if i % 50 == 0:
-                    print(f"{i}/{len(ds)} rows translated")
+
+                batch_count = len(batch["instruction"])
+                translated_rows += batch_count
+                current_progress = min(i + args.batch_size, total_len)
+                if (i // args.batch_size) % 5 == 0 or current_progress == total_len:
+                    print(f"{current_progress}/{total_len} rows translated")
             except Exception as error:
                 print(f"Stopped at row {i}: {error}")
                 print(f"Resume with --resume_from {i}")
