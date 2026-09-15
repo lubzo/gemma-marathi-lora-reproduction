@@ -18,7 +18,7 @@ def build_translator():
         if not text:
             return ""
         inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
-        out = model.generate(**inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("mar_Deva"), max_new_tokens=256)
+        out = model.generate(**inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("mar_Deva"), max_new_tokens=256, max_length=None)
         return tokenizer.decode(out[0], skip_special_tokens=True)
 
     return translate
