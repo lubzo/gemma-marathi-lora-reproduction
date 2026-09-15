@@ -6,3 +6,4 @@ trl
 datasets
 scikit-learn
 huggingface_hub
+ctranslate2
