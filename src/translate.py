@@ -12,13 +12,21 @@ MODEL_NAME = "facebook/nllb-200-distilled-600M"
 def build_translator():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, src_lang="eng_Latn")
-    model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME).to(device)
+    model = AutoModelForSeq2SeqLM.from_pretrained(
+        MODEL_NAME,
+        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+    ).to(device)
 
-    def translate(text):
+    def translate(text, max_new_tokens=256):
         if not text:
             return ""
         inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
-        out = model.generate(**inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("mar_Deva"), max_new_tokens=256, max_length=None)
+        out = model.generate(
+            **inputs,
+            forced_bos_token_id=tokenizer.convert_tokens_to_ids("mar_Deva"),
+            max_new_tokens=max_new_tokens,
+            max_length=None,
+        )
         return tokenizer.decode(out[0], skip_special_tokens=True)
 
     return translate
@@ -44,7 +52,11 @@ def main():
             if i < args.resume_from:
                 continue
             try: 
-                row = {"instruction": translate(ex["instruction"]), "input": translate(ex["input"]), "output": translate(ex["output"])}
+                row = {
+                    "instruction": translate(ex["instruction"]),
+                    "input": translate(ex["input"]),
+                    "output": translate(ex["output"], max_new_tokens=512),
+                }
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
                 f.flush()
                 translated_rows += 1
