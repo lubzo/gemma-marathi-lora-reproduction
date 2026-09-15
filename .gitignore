@@ -1,0 +1,19 @@
+# Python environment
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# IDEs
+/.vscode
+/.idea
+/.fleet
+
+# Logs
+error.log
+
+# pyenv (not currently used, harmless to keep)
+.python-version
