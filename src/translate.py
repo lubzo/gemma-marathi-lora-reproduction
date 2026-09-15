@@ -43,12 +43,17 @@ def main():
         for i, ex in enumerate(ds):
             if i < args.resume_from:
                 continue
-            row = {"instruction": translate(ex["instruction"]), "input": translate(ex["input"]), "output": translate(ex["output"])}
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-            translated_rows += 1
-            if i % 50 == 0:
-                print(f"{i}/{len(ds)} rows translated")
-                
+            try: 
+                row = {"instruction": translate(ex["instruction"]), "input": translate(ex["input"]), "output": translate(ex["output"])}
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                f.flush()
+                translated_rows += 1
+                if i % 50 == 0:
+                    print(f"{i}/{len(ds)} rows translated")
+            except Exception as error:
+                print(f"Stopped at row {i}: {error}")
+                print(f"Resume with --resume_from {i}")
+                break
     print(f"Done. Translated {translated_rows} rows.")
 
 if __name__ == "__main__":
