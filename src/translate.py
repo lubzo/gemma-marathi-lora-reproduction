@@ -38,14 +38,18 @@ def main():
     translate = build_translator()
     mode = "a" if args.resume_from > 0 else "w"
     with open(args.output, mode, encoding="utf-8") as f:
+        translated_rows = 0
+
         for i, ex in enumerate(ds):
             if i < args.resume_from:
                 continue
             row = {"instruction": translate(ex["instruction"]), "input": translate(ex["input"]), "output": translate(ex["output"])}
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            translated_rows += 1
             if i % 50 == 0:
                 print(f"{i}/{len(ds)} rows translated")
-
+                
+    print(f"Done. Translated {translated_rows} rows.")
 
 if __name__ == "__main__":
     main()
