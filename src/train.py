@@ -28,6 +28,7 @@ def main():
 
     # Configure the model for 4-bit quantization using BitsAndBytesConfig
     bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_id)
     device_map = {"": torch.cuda.current_device()} if torch.cuda.is_available() else None
     model = AutoModelForCausalLM.from_pretrained(
         args.model_id,
