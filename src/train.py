@@ -28,8 +28,12 @@ def main():
 
     # Configure the model for 4-bit quantization using BitsAndBytesConfig
     bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16)
-    tokenizer = AutoTokenizer.from_pretrained(args.model_id)
-    model = AutoModelForCausalLM.from_pretrained(args.model_id, quantization_config=bnb_config, device_map="auto")
+    device_map = {"": torch.cuda.current_device()} if torch.cuda.is_available() else None
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_id,
+        quantization_config=bnb_config,
+        device_map=device_map,
+    )
 
     lora_config = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
                               target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], task_type="CAUSAL_LM")
