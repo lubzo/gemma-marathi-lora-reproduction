@@ -1,9 +1,14 @@
 """
 train.py — LoRA fine-tuning for one Gemma variant on Marathi Alpaca data.
 """
-import argparse
+import argparse, os
+
+# If running single-process on multi-GPU, isolate to GPU 0 to prevent DataParallel conflicts with bitsandbytes
+if "LOCAL_RANK" not in os.environ and "CUDA_VISIBLE_DEVICES" not in os.environ:
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from peft import LoraConfig
 from trl import SFTConfig, SFTTrainer
 from datasets import load_dataset
@@ -26,14 +31,23 @@ def main():
     parser.add_argument("--limit", type=int, default=None, help="Limit number of training samples for testing")
     args = parser.parse_args()
 
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    use_bf16 = torch.cuda.is_bf16_supported() if torch.cuda.is_available() else False
+    compute_dtype = torch.bfloat16 if use_bf16 else torch.float16
+
     # Configure the model for 4-bit quantization using BitsAndBytesConfig
-    bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16)
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=compute_dtype,
+    )
     tokenizer = AutoTokenizer.from_pretrained(args.model_id)
-    device_map = {"": torch.cuda.current_device()} if torch.cuda.is_available() else None
+    device_map = {"": local_rank} if torch.cuda.is_available() else None
     model = AutoModelForCausalLM.from_pretrained(
         args.model_id,
         quantization_config=bnb_config,
         device_map=device_map,
+        attn_implementation="sdpa",
     )
 
     lora_config = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
@@ -52,7 +66,10 @@ def main():
         gradient_accumulation_steps=args.grad_accum,
         num_train_epochs=args.epochs,
         learning_rate=args.lr,
-        bf16=True,
+        fp16=not use_bf16,
+        bf16=use_bf16,
+        optim="paged_adamw_8bit",
+        ddp_find_unused_parameters=False,
         logging_steps=25,
         save_strategy="epoch",
         report_to="none",
