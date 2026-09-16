@@ -5,7 +5,7 @@ import argparse
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TrainingArguments
 from peft import LoraConfig
-from trl import SFTTrainer
+from trl import SFTConfig, SFTTrainer
 from datasets import load_dataset
 
 
@@ -35,14 +35,26 @@ def main():
 
     ds = load_dataset(args.dataset)["train"].map(format_example)
 
-    training_args = TrainingArguments(
-        output_dir=args.output_dir, per_device_train_batch_size=args.batch_size,
-        gradient_accumulation_steps=args.grad_accum, num_train_epochs=args.epochs,
-        learning_rate=args.lr, bf16=True, logging_steps=25, save_strategy="epoch", report_to="none",
+    training_args = SFTConfig(
+        output_dir=args.output_dir,
+        dataset_text_field="text",
+        max_seq_length=args.max_seq_length,
+        per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.grad_accum,
+        num_train_epochs=args.epochs,
+        learning_rate=args.lr,
+        bf16=True,
+        logging_steps=25,
+        save_strategy="epoch",
+        report_to="none",
     )
 
-    trainer = SFTTrainer(model=model, args=training_args, train_dataset=ds,
-                          peft_config=lora_config, dataset_text_field="text", max_seq_length=args.max_seq_length)
+    trainer = SFTTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=ds,
+        peft_config=lora_config,
+    )
     trainer.train()
     trainer.save_model(args.output_dir)
     tokenizer.save_pretrained(args.output_dir)
