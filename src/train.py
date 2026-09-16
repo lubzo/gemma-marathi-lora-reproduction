@@ -86,6 +86,10 @@ def main():
     tokenizer.save_pretrained(args.output_dir)
     print(f"Done. Adapter saved to {args.output_dir}")
 
+    # Clean up distributed process group if running under torchrun/DDP
+    if torch.distributed.is_initialized():
+        torch.distributed.destroy_process_group()
+
 
 if __name__ == "__main__":
     main()
