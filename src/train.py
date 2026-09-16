@@ -16,7 +16,7 @@ def format_example(ex):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_id", required=True)
-    parser.add_argument("--dataset", default="lubzo/marathi-alpaca-translated") #use translation dataset 
+    parser.add_argument("--dataset", default="lubzo/marathi-alpaca-cleaned-translated")
     parser.add_argument("--output_dir", required=True)
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch_size", type=int, default=2)
