@@ -30,20 +30,24 @@ def main():
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--max_seq_length", type=int, default=512)
     parser.add_argument("--limit", type=int, default=None, help="Limit number of training samples for testing")
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Checkpoint path or 'True' to resume")
     args = parser.parse_args()
 
     local_rank = int(os.environ.get("LOCAL_RANK", 0))
     device_map = {"": local_rank} if torch.cuda.is_available() else None
 
+    use_bf16 = torch.cuda.is_bf16_supported() if torch.cuda.is_available() else False
+    compute_dtype = torch.bfloat16 if use_bf16 else torch.float16
+    precision_name = "BF16" if use_bf16 else "FP16"
+
     tokenizer = AutoTokenizer.from_pretrained(args.model_id)
 
-    # Load base model directly in native FP16 (takes ~5 GB VRAM on each 16 GB T4)
-    print(f"[Rank {local_rank}] Loading base model in native FP16...")
+    print(f"[Rank {local_rank}] Loading base model in native {precision_name}...")
     model = AutoModelForCausalLM.from_pretrained(
         args.model_id,
-        dtype=torch.float16,
+        dtype=compute_dtype,
         device_map=device_map,
-        attn_implementation="eager",
+        attn_implementation="sdpa" if use_bf16 else "eager",
     )
 
     lora_config = LoraConfig(
@@ -67,12 +71,14 @@ def main():
         gradient_accumulation_steps=args.grad_accum,
         num_train_epochs=args.epochs,
         learning_rate=args.lr,
-        fp16=True,
-        bf16=False,
+        fp16=not use_bf16,
+        bf16=use_bf16,
         optim="adamw_torch",
         ddp_find_unused_parameters=False,
         logging_steps=25,
-        save_strategy="epoch",
+        save_strategy="steps",
+        save_steps=500,
+        save_total_limit=2,
         report_to="none",
     )
 
@@ -83,8 +89,12 @@ def main():
         peft_config=lora_config,
     )
 
-    print(f"[Rank {local_rank}] Starting training...")
-    trainer.train()
+    resume_checkpoint = args.resume_from_checkpoint
+    if resume_checkpoint and resume_checkpoint.lower() == "true":
+        resume_checkpoint = True
+
+    print(f"[Rank {local_rank}] Starting training ({precision_name})...")
+    trainer.train(resume_from_checkpoint=resume_checkpoint)
 
     if local_rank == 0:
         trainer.save_model(args.output_dir)
