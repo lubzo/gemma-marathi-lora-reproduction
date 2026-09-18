@@ -156,7 +156,7 @@ Because prior work did not document which F1 formulation was reported, the table
 ```
 src/
   train.py                        # Standalone training script with LoRA PEFT
-  evaluate.py                     # 5-benchmark evaluation suite (Logit scoring + batched)
+  evaluate.py                     # 5-benchmark evaluation suite
   translate_ct2.py                # High-speed NLLB CTranslate2 translation pipeline
 results/
   automated_scores.csv            # Raw log of all benchmark runs across models
